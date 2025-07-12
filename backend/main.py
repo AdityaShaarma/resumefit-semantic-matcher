@@ -20,6 +20,6 @@ def match_score(data: MatchRequest):
         mlflow.log_param("model", "SBERT")
         mlflow.log_param("resume_length", len(data.resume))
         mlflow.log_param("jd_length", len(data.jd))
-        mlflow.log_metric("match_score", score)
+        mlflow.log_metric("match_score", float(score))  # fix here
 
-        return {"match_score": round(score, 3)}
+        return {"match_score": float(round(score, 3))}  # fix here
