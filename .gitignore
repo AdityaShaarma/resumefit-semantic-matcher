@@ -1,2 +1,9 @@
+# Python bytecode
 __pycache__/
-mlruns
+*.pyc
+
+# MLflow logs
+mlruns/
+
+# Environment variables
+.env
