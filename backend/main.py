@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import mlflow
 from models.embedding_model import get_embedding
 from models.matcher import compute_similarity
+import mlflow
 
 app = FastAPI()
 
