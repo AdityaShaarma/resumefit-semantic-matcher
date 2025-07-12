@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+mlflow
+sentence-transformers
+nltk
+python-dotenv
