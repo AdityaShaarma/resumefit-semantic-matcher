@@ -4,6 +4,3 @@ __pycache__/
 
 # MLflow logs
 mlruns/
-
-# Environment variables
-.env
