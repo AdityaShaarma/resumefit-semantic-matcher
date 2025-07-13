@@ -77,7 +77,7 @@ if st.button("🔍 Compute Match Score"):
         st.warning("Please upload or paste both Resume and Job Description.")
     else:
         try:
-            response = requests.post("http://localhost:8000/match", json={"resume": resume_text, "jd": jd_text})
+            response = requests.post("https://resumefit-semantic-matcher.onrender.com", json={"resume": resume_text, "jd": jd_text})
             response.raise_for_status()
             data = response.json()
             score = data["match_score"]
