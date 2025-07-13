@@ -1,0 +1,14 @@
+fastapi==0.116.1
+uvicorn==0.35.0
+sentence-transformers==5.0.0
+scikit-learn==1.7.0
+nltk==3.9.1
+mlflow==3.1.1
+python-dotenv==1.1.1
+pandas==2.3.1
+requests==2.32.4
+streamlit==1.46.1
+matplotlib==3.10.3
+seaborn==0.13.2
+transformers==4.53.2
+PyMuPDF==1.23.21
