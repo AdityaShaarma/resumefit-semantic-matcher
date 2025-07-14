@@ -1,18 +1,25 @@
-fastapi==0.116.1
-uvicorn==0.35.0
-sentence-transformers==5.0.0
-scikit-learn==1.7.0
-nltk==3.9.1
-mlflow==3.1.1
-python-dotenv==1.0.1
-pandas==2.3.1
-requests==2.32.4
+# Core Application
 streamlit==1.46.1
-matplotlib==3.10.3
-seaborn==0.13.2
+numpy==1.26.4
+pandas==2.3.1
+
+# PDF Text Extraction
 PyMuPDF==1.22.5
 pdfplumber==0.10.3
 PyPDF2==3.0.1
-streamlit
-numpy
-nltk
+
+# NLP and Embeddings
+nltk==3.9.1
+spacy==3.7.4
+sentence-transformers==5.0.0
+scikit-learn==1.7.0
+
+# MLflow (optional, for local runs only)
+mlflow==3.1.1
+
+# Miscellaneous
+requests==2.32.4
+python-dotenv==1.0.1
+
+# Install spaCy English model (automatically handled in app.py, but kept for reproducibility)
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
