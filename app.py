@@ -36,13 +36,14 @@ st.markdown("""
     }
     .stButton>button {
         background-color: #4CAF50;
-        color: white;
+        color: white !important;
         font-weight: bold;
         padding: 0.5em 1em;
         border-radius: 8px;
     }
     .stTextArea textarea {
-        background-color: #fffdf9;
+        background-color: #fffdf9 !important;
+        color: #000000 !important;
         border-radius: 8px;
     }
     </style>
