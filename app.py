@@ -1,35 +1,56 @@
-import streamlit as st
-import fitz
 import os
 import re
+import fitz  # PyMuPDF
 import nltk
-import mlflow
 import numpy as np
-import io
+import streamlit as st
 from sentence_transformers import SentenceTransformer
 from nltk.corpus import stopwords
-from datetime import datetime
-import pandas as pd
-from mlflow.tracking import MlflowClient
 
-nltk.download('stopwords')
-STOPWORDS = set(stopwords.words('english'))
+# Try to load MLflow if available
+try:
+    import mlflow
+    IS_LOCAL = os.getenv("IS_LOCAL", "false").lower() == "true"
+    if IS_LOCAL:
+        mlflow.set_tracking_uri("http://127.0.0.1:5000")
+        mlflow.set_experiment("ResumeFit Matcher")
+        ENABLE_MLFLOW = True
+    else:
+        ENABLE_MLFLOW = False
+except ImportError:
+    ENABLE_MLFLOW = False
 
-# Load embedding model
+nltk.download("stopwords")
+STOPWORDS = set(stopwords.words("english"))
 sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
 MODEL_NAME = "SBERT"
 
-# Setup MLflow
-mlflow.set_tracking_uri("http://127.0.0.1:5000")
-mlflow.set_experiment("ResumeFit Matcher")
+st.set_page_config(page_title="ResumeFit Matcher", layout="centered")
 
-# Streamlit config
-st.set_page_config(page_title="ResumeFit Matcher", layout="wide")
+st.markdown("""
+    <style>
+    .reportview-container {
+        background: #f9f9f9;
+        color: #333;
+        font-family: "Segoe UI", sans-serif;
+    }
+    .stButton>button {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+        padding: 0.5em 1em;
+        border-radius: 8px;
+    }
+    .stTextArea textarea {
+        background-color: #fffdf9;
+        border-radius: 8px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 st.title("Resume ↔ Job Matcher")
-st.markdown("Upload your **Resume** and **Job Description** as PDFs or paste the text manually to analyze semantic match score.")
+st.markdown("Upload or paste your **Resume** and **Job Description** below to check match compatibility.")
 
-# Helper: Preprocessing
 def preprocess(text: str) -> str:
     text = text.lower()
     text = re.sub(r"[^\w\s]", "", text)
@@ -37,7 +58,22 @@ def preprocess(text: str) -> str:
     tokens = [word for word in tokens if word not in STOPWORDS]
     return " ".join(tokens)
 
-# Helper: Extract PDF text
+def get_embedding(text: str):
+    return sbert_model.encode(preprocess(text))
+
+def compute_similarity(vec1, vec2):
+    return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
+
+def keyword_overlap(resume: str, jd: str) -> float:
+    resume_tokens = set(resume.split())
+    jd_tokens = set(jd.split())
+    if not jd_tokens:
+        return 0.0
+    return len(resume_tokens & jd_tokens) / len(jd_tokens)
+
+def compute_final_score(embedding_score, keyword_score, alpha=0.7):
+    return alpha * embedding_score + (1 - alpha) * keyword_score
+
 def extract_text_from_pdf(file):
     text = ""
     with fitz.open(stream=file.read(), filetype="pdf") as doc:
@@ -45,124 +81,67 @@ def extract_text_from_pdf(file):
             text += page.get_text()
     return text.strip()
 
-# Helper: Embedding
-def get_embedding(text: str):
-    return sbert_model.encode(preprocess(text))
-
-# Helper: Cosine similarity
-def compute_similarity(vec1, vec2):
-    return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
-
-# Helper: Keyword overlap
-def keyword_overlap(resume: str, jd: str) -> float:
-    resume_tokens = set(preprocess(resume).split())
-    jd_tokens = set(preprocess(jd).split())
-    if not jd_tokens:
-        return 0.0
-    return len(resume_tokens & jd_tokens) / len(jd_tokens)
-
-# Final scoring
-def compute_final_score(embedding_score, keyword_score, alpha=0.7):
-    return alpha * embedding_score + (1 - alpha) * keyword_score
-
-# Feedback explanation
-def get_feedback(embedding_score, keyword_score, final_score):
-    tips = []
-    if embedding_score < 0.6:
-        tips.append("Semantic match is weak. Consider aligning your language with job keywords.")
-    if keyword_score < 0.3:
-        tips.append("Few shared keywords. Tailor your resume to match the job description.")
-    if final_score < 0.5:
-        tips.append("Overall match is low. Try emphasizing relevant experience and terminology.")
-    if not tips:
-        tips.append("Great alignment between your resume and the job description.")
-    return tips
-
-# PDF Upload or Text
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("Upload Resume (PDF)")
-    resume_file = st.file_uploader("Upload Resume", type=["pdf"], key="resume")
+    resume_file = st.file_uploader("Upload Resume", type=["pdf"], key="resume_upload")
 with col2:
     st.subheader("Upload Job Description (PDF)")
-    jd_file = st.file_uploader("Upload JD", type=["pdf"], key="jd")
+    jd_file = st.file_uploader("Upload JD", type=["pdf"], key="jd_upload")
 
-st.subheader("OR Paste Text")
-resume_text_input = st.text_area("Paste Resume Text", height=150)
-jd_text_input = st.text_area("Paste Job Description Text", height=150)
+st.subheader("OR Paste Text Instead")
+resume_input = st.text_area("Paste Resume Text", height=180)
+jd_input = st.text_area("Paste Job Description Text", height=180)
 
-resume_text = extract_text_from_pdf(resume_file) if resume_file else resume_text_input
-jd_text = extract_text_from_pdf(jd_file) if jd_file else jd_text_input
+resume_text = extract_text_from_pdf(resume_file) if resume_file else resume_input
+jd_text = extract_text_from_pdf(jd_file) if jd_file else jd_input
 
 if st.button("Compute Match Score"):
     if not resume_text or not jd_text:
-        st.warning("Please upload or paste both resume and job description.")
+        st.warning("Please provide both resume and job description.")
     else:
-        with mlflow.start_run():
-            resume_clean = preprocess(resume_text)
-            jd_clean = preprocess(jd_text)
-            resume_vec = get_embedding(resume_clean)
-            jd_vec = get_embedding(jd_clean)
+        resume_clean = preprocess(resume_text)
+        jd_clean = preprocess(jd_text)
 
-            emb_score = compute_similarity(resume_vec, jd_vec)
-            kw_score = keyword_overlap(resume_clean, jd_clean)
-            final_score = compute_final_score(emb_score, kw_score)
+        resume_vec = get_embedding(resume_clean)
+        jd_vec = get_embedding(jd_clean)
 
-            overlap_words = sorted(list(set(resume_clean.split()) & set(jd_clean.split())))
-            feedback = get_feedback(emb_score, kw_score, final_score)
+        embedding_score = compute_similarity(resume_vec, jd_vec)
+        overlap_score = keyword_overlap(resume_clean, jd_clean)
+        final_score = compute_final_score(embedding_score, overlap_score)
 
-            mlflow.log_param("model", MODEL_NAME)
-            mlflow.log_param("resume_length", len(resume_text))
-            mlflow.log_param("jd_length", len(jd_text))
-            mlflow.log_metric("embedding_score", emb_score)
-            mlflow.log_metric("keyword_overlap", kw_score)
-            mlflow.log_metric("final_match_score", final_score)
+        if ENABLE_MLFLOW:
+            with mlflow.start_run():
+                mlflow.log_param("model", MODEL_NAME)
+                mlflow.log_param("resume_length", len(resume_text))
+                mlflow.log_param("jd_length", len(jd_text))
+                mlflow.log_metric("embedding_score", embedding_score)
+                mlflow.log_metric("keyword_overlap", overlap_score)
+                mlflow.log_metric("final_match_score", final_score)
 
-            st.success(f"Match Score: {final_score * 100:.2f}%")
-            st.markdown("#### Overlapping Keywords:")
-            if overlap_words:
-                st.markdown(", ".join(f"`{word}`" for word in overlap_words))
-            else:
-                st.info("No overlapping keywords found.")
+        st.success(f"Match Score: {final_score * 100:.2f}%")
 
-            st.markdown("#### Feedback Suggestions:")
-            for item in feedback:
-                st.write(f"- {item}")
+        overlapping_words = sorted(set(resume_clean.split()) & set(jd_clean.split()))
+        st.markdown("#### Overlapping Keywords:")
+        if overlapping_words:
+            st.markdown(f"<div style='color: green; font-weight: bold'>{', '.join(f'`{w}`' for w in overlapping_words)}</div>", unsafe_allow_html=True)
+        else:
+            st.info("No overlapping keywords found. Try aligning your resume with the job description.")
 
-            # Downloadable report
-            report = f"""
-            ResumeFit Report – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        st.markdown("### Why You Got This Score:")
+        if embedding_score < 0.7:
+            st.warning(f"Your resume and JD are semantically dissimilar (Embedding Score: {embedding_score:.2f}).")
+        if overlap_score < 0.3:
+            st.warning(f"Few matching keywords were found (Overlap Score: {overlap_score:.2f}).")
+        if embedding_score >= 0.7 and overlap_score >= 0.3:
+            st.success("Your resume aligns well both in meaning and keyword relevance.")
 
-            Match Score: {final_score * 100:.2f}%
-            Embedding Score: {emb_score:.4f}
-            Keyword Overlap: {kw_score:.4f}
-            Overlapping Keywords: {", ".join(overlap_words)}
-
-            Feedback:
-            {' | '.join(feedback)}
-            """
-            st.download_button("Download Report", data=report, file_name="resumefit_report.txt")
-
-# MLflow Analytics Dashboard
-st.markdown("---")
-st.subheader("MLflow Dashboard (All User Trends)")
-
-if st.button("Show Trend Analytics"):
-    client = MlflowClient()
-    runs = client.search_runs(experiment_ids=["0"])
-    data = []
-    for r in runs:
-        m = r.data.metrics
-        p = r.data.params
-        data.append({
-            "Embedding Score": m.get("embedding_score", 0),
-            "Keyword Overlap": m.get("keyword_overlap", 0),
-            "Final Score": m.get("final_match_score", 0),
-            "Resume Length": p.get("resume_length", 0),
-            "JD Length": p.get("jd_length", 0),
-        })
-    df = pd.DataFrame(data)
-    st.dataframe(df)
-
-    st.markdown("##### Score Distribution")
-    st.line_chart(df[["Embedding Score", "Keyword Overlap", "Final Score"]])
+        st.markdown("### Downloadable Feedback")
+        missing = sorted(set(jd_clean.split()) - set(resume_clean.split()))
+        feedback = f"""
+        Match Score: {final_score * 100:.2f}%
+        Embedding Similarity: {embedding_score:.2f}
+        Keyword Overlap: {overlap_score:.2f}
+        Missing Keywords: {', '.join(missing[:50])}
+        """
+        st.download_button("Download Feedback Report", feedback, file_name="resume_match_feedback.txt")
