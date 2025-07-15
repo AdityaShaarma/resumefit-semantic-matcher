@@ -4,7 +4,7 @@ numpy==1.26.4
 pandas==2.3.1
 
 # PDF Text Extraction
-PyMuPDF==1.22.5
+PyMuPDF==1.24.10
 pdfplumber==0.10.3
 PyPDF2==3.0.1
 

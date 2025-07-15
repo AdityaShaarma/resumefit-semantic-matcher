@@ -1,5 +1,5 @@
 import streamlit as st
-import fitz  # PyMuPDF for extracting text from PDF files
+import pdfplumber  # For extracting text from PDF files
 import re
 import nltk
 import mlflow
@@ -125,13 +125,13 @@ def compute_final_score(embedding_score: float, keyword_score: float, alpha: flo
     return alpha * embedding_score + (1 - alpha) * keyword_score
 
 def extract_text_from_pdf(file):
-    # Extract all text from a PDF using PyMuPDF
-    # Includes error handling for corrupted or unreadable PDFs
+    # Extracts text from a PDF file using pdfplumber (more Streamlit-friendly)
     try:
         text = ""
-        with fitz.open(stream=file.read(), filetype="pdf") as doc:
-            for page in doc:
-                text += page.get_text()
+        with pdfplumber.open(file) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                text += page_text
         return text.strip()
     except Exception as e:
         st.error(f"Could not read PDF: {e}. Please paste the text manually.")
