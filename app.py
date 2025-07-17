@@ -1,5 +1,5 @@
 import streamlit as st
-import pdfplumber  # For extracting text from PDF files
+import PyPDF2
 import re
 import nltk
 import mlflow
@@ -125,13 +125,13 @@ def compute_final_score(embedding_score: float, keyword_score: float, alpha: flo
     return alpha * embedding_score + (1 - alpha) * keyword_score
 
 def extract_text_from_pdf(file):
-    # Extracts text from a PDF file using pdfplumber (more Streamlit-friendly)
+    # Extracts text from a PDF using PyPDF2 (lightweight and Streamlit-friendly)
     try:
         text = ""
-        with pdfplumber.open(file) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text() or ""
-                text += page_text
+        pdf_reader = PyPDF2.PdfReader(file)
+        for page in pdf_reader.pages:
+            page_text = page.extract_text() or ""
+            text += page_text
         return text.strip()
     except Exception as e:
         st.error(f"Could not read PDF: {e}. Please paste the text manually.")
