@@ -1,5 +1,5 @@
 import streamlit as st
-import PyPDF2
+import PyPDF2  # For extracting text from PDF files
 import re
 import nltk
 import mlflow
@@ -7,6 +7,7 @@ import numpy as np
 import spacy
 from sentence_transformers import SentenceTransformer
 from nltk.corpus import stopwords
+import time  # For simulating progress bar updates
 
 # INITIAL SETUP: LOAD MODELS, STOPWORDS, AND TRACKING CONFIG
 
@@ -17,11 +18,10 @@ STOPWORDS = set(stopwords.words('english'))
 # Load the SBERT model for semantic similarity (compact but effective)
 sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# Ensure spaCy English model is available; auto-downloads if missing
+# Ensure spaCy English model is available; fallback to blank English model if download fails
 try:
     nlp = spacy.load("en_core_web_sm")
 except:
-    import spacy
     nlp = spacy.blank("en")
 
 # Model name for logging and tracking
@@ -89,26 +89,24 @@ def compute_similarity(vec1, vec2):
     return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
 
 def extract_skills_ner(text: str):
-    # Extract potential technical skills using both NER and regex-based keyword detection
+    # Extract potential technical skills using:
+    # 1. spaCy NER for organizations, products, and tech-related entities
+    # 2. regex to capture any tech-like alphanumeric terms (e.g., libraries, tools, versions)
     doc = nlp(text)
     skills = set()
 
-    # Use spaCy's named entity recognition to catch organizations, products, and technologies
+    # Add spaCy-detected named entities
     for ent in doc.ents:
         if ent.label_ in ["ORG", "PRODUCT", "WORK_OF_ART", "FAC"]:
             skills.add(ent.text.lower())
 
-    # Regex pattern to detect technical terms (e.g., programming languages, libraries)
-    tech_keywords = re.findall(r"\b[a-zA-Z\+\#\d]+\b", text)
+    # Use regex to detect any tech-like term with letters, numbers, +, #, -, or .
+    tech_keywords = re.findall(r"\b[a-zA-Z0-9\+\#\-\._]{2,}\b", text)
     for kw in tech_keywords:
         kw = kw.lower()
-        if kw not in STOPWORDS and len(kw) > 1:
-            if any(c.isdigit() for c in kw) or kw in [
-                "python", "java", "c++", "c#", "sql", "pandas", "numpy",
-                "tensorflow", "pytorch", "keras", "scikit-learn", "xgboost",
-                "azure", "aws", "databricks", "bert", "gpt", "transformers"
-            ]:
-                skills.add(kw)
+        if kw not in STOPWORDS:
+            skills.add(kw)
+
     return skills
 
 def keyword_overlap(resume: str, jd: str) -> float:
@@ -124,7 +122,7 @@ def compute_final_score(embedding_score: float, keyword_score: float, alpha: flo
     return alpha * embedding_score + (1 - alpha) * keyword_score
 
 def extract_text_from_pdf(file):
-    # Extracts text from a PDF using PyPDF2 (lightweight and Streamlit-friendly)
+    # Extract text from a PDF using PyPDF2 (lightweight and Streamlit-friendly)
     try:
         text = ""
         pdf_reader = PyPDF2.PdfReader(file)
@@ -176,32 +174,31 @@ if (resume_file and resume_input.strip()) or (jd_file and jd_input.strip()):
     st.error("Please use either PDF upload OR text input for each field, not both.")
     st.stop()
 
-# Extract text from PDFs or fallback to manual text input
-resume_text = extract_text_from_pdf(resume_file) if resume_file else resume_input
-if resume_file and not resume_text:
-    resume_text = resume_input  # fallback if PDF fails or is empty
-
-jd_text = extract_text_from_pdf(jd_file) if jd_file else jd_input
-if jd_file and not jd_text:
-    jd_text = jd_input
-
 # SCORE COMPUTATION AND DISPLAY
 
 if st.button("Compute Match Score"):
-    if not resume_text or not jd_text:
+    if not (resume_file or resume_input.strip()) or not (jd_file or jd_input.strip()):
         st.warning("Please provide both resume and job description.")
     else:
-        # Use MLflow run if available; otherwise just show a spinner
+        # Show a progress bar for better UX during processing
+        progress_bar = st.progress(0)
+        for percent in range(0, 101, 10):
+            time.sleep(0.05)  # Simulate gradual loading effect
+            progress_bar.progress(percent)
+
+        # Extract text from PDFs or fallback to manual text input
+        resume_text = extract_text_from_pdf(resume_file) if resume_file else resume_input
+        jd_text = extract_text_from_pdf(jd_file) if jd_file else jd_input
+
+        # Start MLflow tracking if enabled; otherwise just compute directly
         context = mlflow.start_run() if MLFLOW_ENABLED else st.spinner("Computing match score...")
         with context:
-            # Compute semantic similarity and keyword overlap
             resume_vec = get_embedding(preprocess(resume_text))
             jd_vec = get_embedding(preprocess(jd_text))
             embedding_score = compute_similarity(resume_vec, jd_vec)
             overlap_score = keyword_overlap(resume_text, jd_text)
             final_score = compute_final_score(embedding_score, overlap_score)
 
-            # Log details to MLflow if enabled
             if MLFLOW_ENABLED:
                 mlflow.log_param("model", MODEL_NAME)
                 mlflow.log_param("resume_length", len(resume_text))
@@ -210,10 +207,8 @@ if st.button("Compute Match Score"):
                 mlflow.log_metric("keyword_overlap", overlap_score)
                 mlflow.log_metric("final_match_score", final_score)
 
-            # Display the final score prominently
             st.success(f"Match Score: {final_score * 100:.2f}%")
 
-            # Show overlapping technical keywords
             st.markdown("#### Overlapping Keywords:")
             overlapping_keywords = extract_skills_ner(resume_text) & extract_skills_ner(jd_text)
             if overlapping_keywords:
@@ -225,7 +220,6 @@ if st.button("Compute Match Score"):
             else:
                 st.info("No overlapping technical keywords found. Add relevant tools or technologies.")
 
-            # Explain the reasoning behind the score
             st.markdown("#### Why You Got This Score:")
             feedback = generate_feedback(resume_text, jd_text, embedding_score, overlap_score)
             st.markdown(
@@ -234,5 +228,4 @@ if st.button("Compute Match Score"):
                 unsafe_allow_html=True
             )
 
-            # Allow users to download feedback as a text report
             st.download_button("Download Feedback Report", feedback, file_name="resume_match_feedback.txt")
