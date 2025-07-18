@@ -17,4 +17,4 @@ requests
 python-dotenv
 
 # MLflow (optional, for local runs only – comment out on Streamlit Cloud)
-# mlflow
+mlflow
