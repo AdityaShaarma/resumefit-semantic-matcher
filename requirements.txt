@@ -12,11 +12,9 @@ spacy
 sentence-transformers
 scikit-learn
 
-# MLflow (optional, for local use only – disable for Streamlit Cloud)
-mlflow
-
 # Miscellaneous
 requests
 python-dotenv
 
-# spaCy English model auto-downloaded in app.py; no tarball required
+# MLflow (optional, for local runs only – comment out on Streamlit Cloud)
+# mlflow
