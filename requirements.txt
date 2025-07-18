@@ -13,7 +13,7 @@ sentence-transformers
 scikit-learn
 
 # MLflow (optional, for local use only – disable for Streamlit Cloud)
-# mlflow
+mlflow
 
 # Miscellaneous
 requests
