@@ -1,22 +1,22 @@
 # Core Application
-streamlit==1.46.1
-numpy==1.26.4
-pandas==2.3.1
+streamlit
+numpy
+pandas
 
-PyPDF2==3.0.1
+# PDF Text Extraction (reliable)
+PyPDF2
 
 # NLP and Embeddings
-nltk==3.9.1
-spacy==3.7.4
-sentence-transformers==5.0.0
-scikit-learn==1.7.0
+nltk
+spacy
+sentence-transformers
+scikit-learn
 
-# MLflow (optional, for local runs only)
-mlflow==3.1.1
+# MLflow (optional, for local use only – disable for Streamlit Cloud)
+# mlflow
 
 # Miscellaneous
-requests==2.32.4
-python-dotenv==1.0.1
+requests
+python-dotenv
 
-# Install spaCy English model (automatically handled in app.py, but kept for reproducibility)
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+# spaCy English model auto-downloaded in app.py; no tarball required
