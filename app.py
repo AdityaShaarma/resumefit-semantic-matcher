@@ -20,10 +20,9 @@ sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
 # Ensure spaCy English model is available; auto-downloads if missing
 try:
     nlp = spacy.load("en_core_web_sm")
-except OSError:
-    from spacy.cli import download
-    download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+except:
+    import spacy
+    nlp = spacy.blank("en")
 
 # Model name for logging and tracking
 MODEL_NAME = "SBERT"

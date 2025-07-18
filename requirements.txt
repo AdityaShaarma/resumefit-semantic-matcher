@@ -3,7 +3,7 @@ streamlit
 numpy
 pandas
 
-# PDF Text Extraction (reliable)
+# PDF Text Extraction
 PyPDF2
 
 # NLP and Embeddings
@@ -16,5 +16,5 @@ scikit-learn
 requests
 python-dotenv
 
-# MLflow (optional, for local runs only – comment out on Streamlit Cloud)
+# (Optional – Only for local)
 mlflow
