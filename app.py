@@ -88,7 +88,7 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="gray")) 
     matched_keywords_box = gr.Textbox(label="Matched Keywords", interactive=False)
 
     # spaced-out downloadable report
-    gr.Markdown("<br>", unsafe_allow_html=True)
+    gr.Markdown("<br>")
     download_report = gr.File(label="Download Feedback Report")
 
     submit_btn.click(
