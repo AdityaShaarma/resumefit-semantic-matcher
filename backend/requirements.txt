@@ -1,9 +1,0 @@
-fastapi==0.116.1
-uvicorn==0.30.6
-sentence-transformers==2.7.0
-torch==2.7.1
-nltk==3.9.1
-spacy==3.7.4
-numpy==1.26.4
-mlflow==3.1.1
-python-dotenv==1.0.1
