@@ -16,7 +16,7 @@ nltk.download('stopwords')
 STOPWORDS = set(stopwords.words('english'))
 
 # Load SBERT for semantic similarity; optimized for speed and strong text similarity performance
-sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
+sbert_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
 # Load spaCy's English model; fallback to a blank pipeline if deployment environment blocks large model download
 try:
