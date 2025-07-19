@@ -1,109 +1,92 @@
 import re
 import numpy as np
-import nltk
-import spacy
 from sentence_transformers import SentenceTransformer
+import nltk
 from nltk.corpus import stopwords
-from functools import lru_cache
 
-# INITIAL SETUP
-# Download and cache NLTK stopwords if not already present
+# download stopwords if not already available
 nltk.download("stopwords", quiet=True)
 STOPWORDS = set(stopwords.words("english"))
 
-# MODEL INITIALIZATION
-# SBERT model is lazy-loaded and cached to reduce startup time on Hugging Face
-@lru_cache(maxsize=1)
-def get_sbert_model():
-    return SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+# initialize SBERT for semantic similarity - forced to CPU for lightweight inference
+sbert_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
-# Load spaCy's English model for NER
-# Fallback to a blank pipeline if unavailable to avoid runtime crashes
-try:
-    nlp = spacy.load("en_core_web_sm")
-except Exception:
-    nlp = spacy.blank("en")
+# curated technical keywords list for stronger keyword extraction
+# can be expanded further based on domains
+TECH_KEYWORDS = {
+    "python", "java", "c++", "c#", "r", "sql", "nosql",
+    "pandas", "numpy", "scikit-learn", "tensorflow", "keras",
+    "pytorch", "xgboost", "transformers", "bert", "gpt",
+    "azure", "aws", "gcp", "databricks", "powerbi", "tableau"
+}
 
-# TEXT PREPROCESSING
 def preprocess(text: str) -> str:
-    # Standardizes and cleans text before generating embeddings
-    # Steps:
-    # 1. Lowercase conversion for case-insensitive comparisons
-    # 2. Remove punctuation and special characters
-    # 3. Tokenization and stopword removal to reduce noise
+    # standardizes and cleans text before further processing
     text = text.lower()
-    text = re.sub(r"[^\w\s]", "", text)
-    tokens = [t for t in text.split() if t not in STOPWORDS]
+    text = re.sub(r"[^\w\s]", " ", text)
+    tokens = text.split()
+    tokens = [t for t in tokens if t not in STOPWORDS]
     return " ".join(tokens)
 
-# EMBEDDING GENERATION
 def get_embedding(text: str) -> np.ndarray:
-    # Converts preprocessed text into a high-dimensional semantic vector using SBERT
-    model = get_sbert_model()
-    return model.encode(preprocess(text))
+    # generates high-dimensional semantic vector representation of text
+    clean_text = preprocess(text)
+    return sbert_model.encode(clean_text)
 
-# COSINE SIMILARITY
-def compute_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
-    # Computes cosine similarity between two vectors
-    # Value close to 1 indicates strong semantic similarity
+def cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+    # calculates cosine similarity between two embedding vectors
+    if np.linalg.norm(vec1) == 0 or np.linalg.norm(vec2) == 0:
+        return 0.0
     return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2)))
 
-# TECHNICAL KEYWORD EXTRACTION
-def extract_skills_ner(text: str) -> set:
-    # Extracts technical skills or relevant keywords from the text using:
-    # 1. spaCy Named Entity Recognition (technologies, organizations, products)
-    # 2. Regex-based keyword detection for programming languages, libraries, and cloud tools
-    doc = nlp(text)
-    skills = set()
+def extract_keywords(text: str) -> set:
+    # extracts relevant keywords from the text using:
+    # 1. regex to find alphanumeric technical terms
+    # 2. matching against curated tech keywords
+    tokens = set(re.findall(r"\b[a-zA-Z\+\#\d]+\b", text.lower()))
+    filtered = {t for t in tokens if t in TECH_KEYWORDS}
+    return filtered
 
-    for ent in doc.ents:
-        if ent.label_ in ["ORG", "PRODUCT", "WORK_OF_ART", "FAC"]:
-            skills.add(ent.text.lower())
-
-    tech_keywords = re.findall(r"\b[a-zA-Z\+\#\d]+\b", text)
-    for kw in tech_keywords:
-        kw = kw.lower()
-        if kw not in STOPWORDS and len(kw) > 1:
-            if (
-                any(c.isdigit() for c in kw)
-                or kw in [
-                    "python", "java", "c++", "c#", "sql", "pandas", "numpy",
-                    "tensorflow", "pytorch", "keras", "scikit-learn", "xgboost",
-                    "azure", "aws", "databricks", "bert", "gpt", "transformers"
-                ]
-            ):
-                skills.add(kw)
-    return skills
-
-# KEYWORD OVERLAP SCORE
 def keyword_overlap(resume: str, jd: str) -> float:
-    # Calculates proportion of job description keywords present in the resume
-    resume_skills = extract_skills_ner(resume)
-    jd_skills = extract_skills_ner(jd)
+    # calculates proportion of jd technical keywords present in the resume
+    resume_skills = extract_keywords(resume)
+    jd_skills = extract_keywords(jd)
     if not jd_skills:
         return 0.0
     return len(resume_skills & jd_skills) / len(jd_skills)
 
-# FINAL MATCH SCORE
-def compute_final_score(embedding_score: float, keyword_score: float, alpha: float = 0.5) -> float:
-    # Combines semantic similarity and keyword overlap using weighted average
-    return alpha * embedding_score + (1 - alpha) * keyword_score
+def weighted_keyword_score(resume: str, jd: str) -> float:
+    # assigns higher weight to rare or specialized skills
+    resume_skills = extract_keywords(resume)
+    jd_skills = extract_keywords(jd)
+    if not jd_skills:
+        return 0.0
+    weights = {skill: 2.0 if skill in {"xgboost", "pytorch", "transformers", "gcp"} else 1.0 for skill in jd_skills}
+    matched_weight = sum(weights[s] for s in resume_skills & jd_skills if s in weights)
+    total_weight = sum(weights.values())
+    return matched_weight / total_weight if total_weight > 0 else 0.0
 
-# FEEDBACK GENERATION
-def generate_feedback(resume: str, jd: str, embedding_score: float, keyword_score: float) -> list:
-    # Creates short, recruiter-friendly feedback points explaining the score
-    resume_skills = extract_skills_ner(resume)
-    jd_skills = extract_skills_ner(jd)
-    missing = jd_skills - resume_skills
+def compute_final_score(resume: str, jd: str, alpha: float = 0.6) -> tuple:
+    # combines semantic similarity and weighted keyword overlap into final score
+    resume_vec = get_embedding(resume)
+    jd_vec = get_embedding(jd)
+    semantic_score = cosine_similarity(resume_vec, jd_vec)
+    keyword_score = weighted_keyword_score(resume, jd)
+    final_score = alpha * semantic_score + (1 - alpha) * keyword_score
+    return final_score, semantic_score, keyword_score
 
-    feedback = []
-    if embedding_score < 0.5:
-        feedback.append(f"Low semantic alignment detected (Embedding Score: {embedding_score:.2f}).")
-    if keyword_score < 0.5:
-        if missing:
-            feedback.append(f"Missing important skills: {', '.join(missing)}.")
-        else:
-            feedback.append("Few technical keywords matched; align terminology with job description.")
-    if not feedback:
-        feedback.append("Your resume aligns strongly with the job description. Great work!")
-    return feedback
+def generate_feedback(resume: str, jd: str, semantic_score: float, keyword_score: float) -> str:
+    # generates human-readable feedback to help improve resume alignment
+    feedback_parts = []
+    missing_keywords = extract_keywords(jd) - extract_keywords(resume)
+
+    if semantic_score < 0.5:
+        feedback_parts.append(f"Your resume does not closely match the job context (semantic similarity: {semantic_score:.2f}).")
+
+    if keyword_score < 0.5 and missing_keywords:
+        feedback_parts.append(f"Consider adding or highlighting these important skills: {', '.join(sorted(missing_keywords))}.")
+
+    if not feedback_parts:
+        feedback_parts.append("Your resume strongly aligns with the job requirements. Great work!")
+
+    return " ".join(feedback_parts)

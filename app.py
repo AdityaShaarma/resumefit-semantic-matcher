@@ -1,80 +1,43 @@
 import gradio as gr
-import PyPDF2
-from model_utils import (
-    get_embedding, compute_similarity, keyword_overlap,
-    compute_final_score, generate_feedback, extract_skills_ner
-)
+from model_utils import compute_final_score, generate_feedback, extract_keywords
 
-# PDF TEXT EXTRACTION
-def extract_text_from_pdf(file_obj) -> str:
-    # Extracts text from uploaded PDF; returns empty string if extraction fails
-    text = ""
-    try:
-        pdf_reader = PyPDF2.PdfReader(file_obj)
-        for page in pdf_reader.pages:
-            text += page.extract_text() or ""
-        return text.strip()
-    except Exception:
-        return ""
+def match_resume(resume_text, jd_text):
+    if not resume_text.strip() or not jd_text.strip():
+        return "Please provide both resume and job description.", "", "", ""
 
-# MAIN COMPUTATION FUNCTION
-def compute_match(resume_input, jd_input, resume_pdf=None, jd_pdf=None):
-    # Extract text from PDFs if uploaded, otherwise use text inputs
-    resume_text = extract_text_from_pdf(resume_pdf) if resume_pdf else resume_input
-    jd_text = extract_text_from_pdf(jd_pdf) if jd_pdf else jd_input
-
-    if not resume_text or not jd_text:
-        return "Please provide both Resume and Job Description.", "", [], []
-
-    # Compute similarity scores
-    resume_vec = get_embedding(resume_text)
-    jd_vec = get_embedding(jd_text)
-    embedding_score = compute_similarity(resume_vec, jd_vec)
-    keyword_score = keyword_overlap(resume_text, jd_text)
-    final_score = compute_final_score(embedding_score, keyword_score)
-
-    # Generate feedback and matched keywords
-    feedback = generate_feedback(resume_text, jd_text, embedding_score, keyword_score)
-    matched_keywords = sorted(list(extract_skills_ner(resume_text) & extract_skills_ner(jd_text)))
+    final_score, semantic_score, keyword_score = compute_final_score(resume_text, jd_text)
+    feedback = generate_feedback(resume_text, jd_text, semantic_score, keyword_score)
+    matched_keywords = extract_keywords(resume_text) & extract_keywords(jd_text)
 
     return (
-        f"{final_score * 100:.2f}%",  # Final score
-        "\n".join(feedback),         # Feedback text
-        matched_keywords,            # Keywords to show as tags
-        feedback                     # For downloadable report
+        f"{final_score * 100:.2f}%",
+        f"Semantic Similarity: {semantic_score:.2f} | Keyword Match: {keyword_score:.2f}",
+        feedback,
+        ", ".join(sorted(matched_keywords)) if matched_keywords else "No matched technical keywords found."
     )
 
-# GRADIO INTERFACE DESIGN
-with gr.Blocks(title="ResumeFit Semantic Matcher") as demo:
-    gr.Markdown("# ✅ Resume ↔ Job Matcher\nUpload your resume and job description to check compatibility.")
+with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="gray")) as demo:
+    gr.Markdown("# 📄 Resume ↔ Job Matcher")
+    gr.Markdown("Upload or paste your **Resume** and **Job Description** below to see how well they align.")
 
     with gr.Row():
-        with gr.Column():
-            resume_input = gr.Textbox(label="Paste Resume Text", lines=10, placeholder="Paste your resume here...")
-            resume_pdf = gr.File(label="Upload Resume (PDF)", file_types=[".pdf"])
-        with gr.Column():
-            jd_input = gr.Textbox(label="Paste Job Description Text", lines=10, placeholder="Paste job description here...")
-            jd_pdf = gr.File(label="Upload Job Description (PDF)", file_types=[".pdf"])
+        resume_input = gr.Textbox(label="Paste Resume Text", lines=12, placeholder="Paste your resume text here...")
+        jd_input = gr.Textbox(label="Paste Job Description", lines=12, placeholder="Paste the job description here...")
 
-    compute_btn = gr.Button("Compute Match Score", variant="primary")
+    with gr.Row():
+        output_score = gr.Label(label="Final Match Score")
+        output_details = gr.Textbox(label="Analysis Details", interactive=False)
+    
+    feedback_box = gr.Textbox(label="Feedback & Suggestions", interactive=False)
+    matched_keywords_box = gr.Textbox(label="Matched Keywords", interactive=False)
 
-    final_score = gr.Label(label="Final Match Score")
-    feedback_box = gr.Textbox(label="Why You Got This Score", lines=4, interactive=False)
-    matched_keywords = gr.HighlightedText(label="Matched Keywords")
-    download_feedback = gr.File(label="Download Feedback Report", type="file")
-
-    def save_feedback_for_download(feedback_list):
-        with open("feedback_report.txt", "w") as f:
-            f.write("\n".join(feedback_list))
-        return "feedback_report.txt"
-
-    compute_btn.click(
-        fn=compute_match,
-        inputs=[resume_input, jd_input, resume_pdf, jd_pdf],
-        outputs=[final_score, feedback_box, matched_keywords, download_feedback],
-        postprocess=lambda final, fb, kw, fb_list: (final, fb, [(kw, "match") for kw in kw], save_feedback_for_download(fb_list))
+    submit_btn = gr.Button("Compute Match Score", variant="primary")
+    submit_btn.click(
+        fn=match_resume,
+        inputs=[resume_input, jd_input],
+        outputs=[output_score, output_details, feedback_box, matched_keywords_box]
     )
 
-# RUN APP LOCALLY OR ON HUGGING FACE
-if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    gr.Markdown("This tool uses semantic similarity + smart keyword extraction for accurate matching.")
+
+demo.launch()
