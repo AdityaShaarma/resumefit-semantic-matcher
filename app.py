@@ -4,6 +4,8 @@ import time
 import tempfile
 import traceback
 from model_utils import compute_final_score, extract_keywords
+from datetime import datetime
+import os
 
 # helper function to extract text from PDFs
 def extract_text_from_pdf(pdf_file):
@@ -91,7 +93,7 @@ def match_resume(resume_text, jd_text, resume_pdf, jd_pdf, progress=gr.Progress(
         )
 
         # Set name of file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y-%m-%d")
         file_name = f"ResumeFit_Report_{timestamp}.txt"
 
         tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="w", encoding="utf-8")
