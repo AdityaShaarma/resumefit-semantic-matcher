@@ -1,10 +1,12 @@
 import gradio as gr
 import PyPDF2
 import time
-from model_utils import compute_final_score, generate_feedback, extract_keywords
+import tempfile
+import traceback
+from model_utils import compute_final_score, extract_keywords
 
-# helper function to safely extract text from a PDF file
-# ensures robust handling of pages with empty or malformed text
+# helper function to extract text from PDFs
+# handles empty or malformed pages gracefully
 def extract_text_from_pdf(pdf_file):
     if not pdf_file:
         return ""
@@ -13,16 +15,44 @@ def extract_text_from_pdf(pdf_file):
         pdf_reader = PyPDF2.PdfReader(pdf_file)
         for page in pdf_reader.pages:
             extracted_text += page.extract_text() or ""
-            time.sleep(0.02)  # slight delay for smooth simulated progress
+            time.sleep(0.02)  # adds small delay for smoother progress animation
     except Exception:
         return ""
     return extracted_text.strip()
 
-# main function that handles matching logic
-# prioritizes PDF uploads over pasted text, validates input, and generates all outputs
+# generates recruiter-friendly feedback without numerical scores
+# focuses on actionable suggestions and overall fit
+def recruiter_style_feedback(resume_text, jd_text, semantic_score, keyword_score):
+    missing_keywords = extract_keywords(jd_text) - extract_keywords(resume_text)
+    feedback_parts = []
+
+    if semantic_score >= 0.7 and keyword_score >= 0.6:
+        feedback_parts.append("Your resume is a strong fit and aligns well with the job description.")
+    elif semantic_score >= 0.5:
+        feedback_parts.append("Your resume is contextually relevant, but it could better highlight some technical skills.")
+    else:
+        feedback_parts.append("Your resume shows limited alignment with the job description. Consider tailoring it further.")
+
+    if missing_keywords:
+        feedback_parts.append(f"Consider adding or emphasizing these key skills: {', '.join(sorted(missing_keywords))}.")
+    else:
+        feedback_parts.append("Great job showcasing all the key technical skills required!")
+
+    return " ".join(feedback_parts)
+
+# helper to decide color for visual bars
+# green for strong match, yellow for average, red for weak alignment
+def get_bar_color(score):
+    if score >= 0.7:
+        return "#4CAF50"  # green
+    elif score >= 0.4:
+        return "#FFC107"  # yellow
+    else:
+        return "#F44336"  # red
+
+# main matching function that handles computation and output preparation
 def match_resume(resume_text, jd_text, resume_pdf, jd_pdf, progress=gr.Progress()):
     try:
-        # prioritize PDF uploads if provided
         if resume_pdf:
             progress(0.1, desc="Extracting resume PDF...")
             resume_text = extract_text_from_pdf(resume_pdf)
@@ -30,42 +60,40 @@ def match_resume(resume_text, jd_text, resume_pdf, jd_pdf, progress=gr.Progress(
             progress(0.2, desc="Extracting job description PDF...")
             jd_text = extract_text_from_pdf(jd_pdf)
 
-        # validate inputs
         if not resume_text.strip() or not jd_text.strip():
             return (
                 "Input Error",
                 "Please provide both a resume and job description (paste text or upload PDFs).",
                 0.0, 0.0, 0.0,
                 "No keywords to display.",
-                None
+                None,
+                get_bar_color(0.0),
+                get_bar_color(0.0),
+                get_bar_color(0.0)
             )
 
-        # compute semantic similarity and keyword match scores
         progress(0.5, desc="Analyzing semantic similarity and keyword relevance...")
         final_score, semantic_score, keyword_score = compute_final_score(resume_text, jd_text)
 
-        # extract matched technical keywords
         progress(0.7, desc="Extracting matched technical keywords...")
         matched_keywords = extract_keywords(resume_text) & extract_keywords(jd_text)
         matched_keywords_text = (
             ", ".join(sorted(matched_keywords)) if matched_keywords else "No matched technical keywords found."
         )
 
-        # generate actionable recruiter-style feedback
         progress(1.0, desc="Generating actionable feedback...")
-        feedback = generate_feedback(resume_text, jd_text, semantic_score, keyword_score)
+        feedback = recruiter_style_feedback(resume_text, jd_text, semantic_score, keyword_score)
 
-        # prepare downloadable match report
         report_content = (
             f"Resume ↔ Job Match Report\n\n"
             f"Final Match Score: {final_score * 100:.2f}%\n"
-            f"Semantic Similarity: {semantic_score:.2f}\n"
-            f"Keyword Match: {keyword_score:.2f}\n\n"
             f"Matched Keywords:\n{matched_keywords_text}\n\n"
             f"Feedback & Suggestions:\n{feedback}\n"
         )
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".txt", mode="w", encoding="utf-8")
+        tmp_file.write(report_content)
+        tmp_file.close()
 
-        # return all processed outputs
         return (
             f"{final_score * 100:.2f}%",
             feedback,
@@ -73,79 +101,60 @@ def match_resume(resume_text, jd_text, resume_pdf, jd_pdf, progress=gr.Progress(
             keyword_score,
             final_score,
             matched_keywords_text,
-            report_content
+            tmp_file.name,
+            get_bar_color(semantic_score),
+            get_bar_color(keyword_score),
+            get_bar_color(final_score)
         )
 
     except Exception as e:
-        # catch-all error handling for unexpected issues
+        error_trace = traceback.format_exc()
         return (
             "Processing Error",
-            f"An unexpected error occurred while analyzing: {str(e)}",
+            f"An unexpected error occurred:\n\n{error_trace}",
             0.0, 0.0, 0.0,
             "No keywords to display due to an error.",
-            None
+            None,
+            get_bar_color(0.0),
+            get_bar_color(0.0),
+            get_bar_color(0.0)
         )
 
-# define Gradio interface with a professional, recruiter-friendly design
+# gradio interface with custom font and color-coded score bars
 with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="gray")) as demo:
-    # title and brief instructions
-    gr.Markdown("# Resume ↔ Job Matcher")
-    gr.Markdown(
-        "Upload or paste your **Resume** and **Job Description** to get an accurate match score.\n"
-        "The tool uses **semantic similarity + weighted keyword scoring** to mimic recruiter-level evaluation."
-    )
+    gr.HTML("""
+    <style>
+        * {
+            font-family: Arial, Helvetica, sans-serif !important;
+        }
+    </style>
+    """)
 
-    # input section: paste text or upload PDFs
+    gr.Markdown("# Resume ↔ Job Matcher")
+    gr.Markdown("Upload or paste your **Resume** and **Job Description** to get a recruiter-style match evaluation.")
+
     with gr.Row():
         with gr.Column():
-            resume_input = gr.Textbox(
-                label="Paste Resume Text", lines=10,
-                placeholder="Paste your resume text here..."
-            )
-            resume_pdf = gr.File(
-                label="Upload Resume (PDF)", file_types=[".pdf"]
-            )
+            resume_input = gr.Textbox(label="Paste Resume Text", lines=10, placeholder="Paste your resume text here...")
+            resume_pdf = gr.File(label="Upload Resume (PDF)", file_types=[".pdf"])
         with gr.Column():
-            jd_input = gr.Textbox(
-                label="Paste Job Description Text", lines=10,
-                placeholder="Paste the job description here..."
-            )
-            jd_pdf = gr.File(
-                label="Upload Job Description (PDF)", file_types=[".pdf"]
-            )
+            jd_input = gr.Textbox(label="Paste Job Description Text", lines=10, placeholder="Paste the job description here...")
+            jd_pdf = gr.File(label="Upload Job Description (PDF)", file_types=[".pdf"])
 
-    # action button
     submit_btn = gr.Button("Compute Match Score", variant="primary")
 
-    # output section: core score and recruiter-style feedback
     final_score_label = gr.Label(label="Final Match Score")
-    feedback_box = gr.Textbox(
-        label="Feedback & Suggestions",
-        interactive=False, lines=4
-    )
+    feedback_box = gr.Textbox(label="Feedback & Suggestions", interactive=False, lines=4)
 
-    # visual breakdown: semantic similarity, keyword score, and overall score
     gr.Markdown("### Visual Breakdown of Scores")
-    semantic_bar = gr.Slider(
-        label="Semantic Similarity", minimum=0, maximum=1, step=0.01, interactive=False
-    )
-    keyword_bar = gr.Slider(
-        label="Keyword Match", minimum=0, maximum=1, step=0.01, interactive=False
-    )
-    overall_bar = gr.Slider(
-        label="Overall Match Score", minimum=0, maximum=1, step=0.01, interactive=False
-    )
+    semantic_bar = gr.Slider(label="Semantic Similarity", minimum=0, maximum=1, step=0.01, interactive=False)
+    keyword_bar = gr.Slider(label="Keyword Match", minimum=0, maximum=1, step=0.01, interactive=False)
+    overall_bar = gr.Slider(label="Overall Match Score", minimum=0, maximum=1, step=0.01, interactive=False)
 
-    # matched keywords display
-    matched_keywords_box = gr.Textbox(
-        label="Matched Keywords", interactive=False, lines=2
-    )
-
-    # spaced downloadable report button
-    gr.Markdown("&nbsp;")  # adds spacing before download button
+    matched_keywords_box = gr.Textbox(label="Matched Keywords", interactive=False, lines=2)
+    gr.Markdown("&nbsp;")
     download_report = gr.File(label="Download Feedback Report")
 
-    # connect computation function to button
     submit_btn.click(
         fn=match_resume,
         inputs=[resume_input, jd_input, resume_pdf, jd_pdf],
@@ -156,9 +165,11 @@ with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="gray")) 
             keyword_bar,
             overall_bar,
             matched_keywords_box,
-            download_report
+            download_report,
+            semantic_bar.style,
+            keyword_bar.style,
+            overall_bar.style
         ]
     )
 
-# launch the app
 demo.launch()
