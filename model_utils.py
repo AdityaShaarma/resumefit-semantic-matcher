@@ -188,14 +188,6 @@ TECH_KEYWORDS = {
     "piping design", "revit", "bim", "construction management", "project scheduling", 
     "cost estimation", "contract management",
 
-    # CUSTOMER SERVICE & SUPPORT (Non-Tech)
-    "customer service", "customer support", "client service", "call center", "contact center", 
-    "help desk", "technical support", "troubleshooting", "issue resolution", 
-    "ticketing systems", "zendesk", "live chat support", "phone support", "email support", 
-    "customer satisfaction", "csat", "service level agreements", "escalation", 
-    "conflict resolution", "empathy", "active listening", "product knowledge", 
-    "crm systems", "client relationship", "order processing", "returns handling",
-
     # DESIGN & CREATIVE (Non-Tech)
     "graphic design", "visual design", "ui design", "ux design", "user experience", 
     "user interface", "wireframing", "prototyping", "user research", "usability testing", 
@@ -236,15 +228,6 @@ TECH_KEYWORDS = {
     "physical therapy", "occupational therapy", "dental care", "pharmacy", "patient education", 
     "disease management",
 
-    # HOSPITALITY & RETAIL (Non-Tech)
-    "customer experience", "guest services", "front desk", "concierge", "event planning", 
-    "event management", "catering", "food safety", "servsafe", "housekeeping", 
-    "hospitality management", "hotel management", "reservation systems", "pos systems", 
-    "cash handling", "cashier", "merchandising", "visual merchandising", "inventory management (retail)", 
-    "store operations", "loss prevention", "retail sales", "upselling", "personal shopping", 
-    "order fulfillment", "delivery management", "vendor relations", "customer loyalty", 
-    "store merchandising", "floor set design", "retail management", "franchise management",
-
     # ADMINISTRATIVE & OFFICE SUPPORT (Non-Tech)
     "office administration", "office management", "calendar management", "scheduling", 
     "meeting coordination", "travel arrangements", "clerical work", "data entry", 
@@ -253,22 +236,7 @@ TECH_KEYWORDS = {
     "outlook", "google workspace", "shorthand", "typing", "document preparation", 
     "report writing", "transcription", "office equipment", "printing and scanning", 
     "email management", "bookkeeping", "invoicing", "purchase orders", 
-    "multitasking", "time management", "confidentiality", 
-
-    # SOFT SKILLS 
-    "communication", "verbal communication", "written communication", "presentation skills", 
-    "public speaking", "active listening", "teamwork", "collaboration", "leadership", 
-    "people management", "problem solving", "critical thinking", "creativity", 
-    "innovation", "adaptability", "flexibility", "fast learner", "quick learner", 
-    "time management", "organization", "planning", "attention to detail", "detail oriented", 
-    "analytical skills", "strategic thinking", "work ethic", "reliability", "dependability", 
-    "responsibility", "accountability", "self-motivation", "proactive", "initiative", 
-    "positive attitude", "resilience", "stress management", "conflict resolution", 
-    "emotional intelligence", "empathy", "customer oriented", "interpersonal skills", 
-    "negotiation skills", "decision making", "critical observation", "goal oriented", 
-    "results driven", "willingness to learn", "coachability", "professionalism", 
-    "ethical behavior", "integrity", "self-management", "independent work", 
-    "team player", "multitasking ability", "cultural awareness"
+    "multitasking", "time management", "confidentiality"
 }
 
 # preprocesses text by normalizing it for semantic similarity calculations
