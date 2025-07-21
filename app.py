@@ -6,8 +6,20 @@ import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import os
+import mlflow
+import hashlib
+from mlflow import log_artifact, log_metric, log_param, set_experiment
 
 from model_utils import compute_final_score, extract_keywords, generate_feedback
+
+# MLflow INITIALIZATION
+
+# Sset MLflow Tracking to my local folder
+mlflow_folder = os.path.expanduser("~/Downloads/dev/ResumeFit Resume Matcher/mlruns")
+os.makedirs(mlflow_folder, exist_ok=True)
+mlflow.set_tracking_uri(f"file:{mlflow_folder}")
+
+set_experiment("ResumeFit Matcher")
 
 # extracts all text from a PDF using PyPDF2
 # gracefully handles pages with missing or malformed text
@@ -90,6 +102,27 @@ def match_resume(resume_text, jd_text, resume_pdf, jd_pdf, progress=gr.Progress(
 
         new_path = os.path.join(tempfile.gettempdir(), file_name)
         os.rename(tmp_file.name, new_path)
+
+        # MLflow Logging
+        with mlflow.start_run(run_name=f"Match_{timestamp}"):
+            # Parameters (metadata)
+            log_param("resume_text_hash", hashlib.md5(resume_text.encode()).hexdigest())
+            log_param("jd_text_hash", hashlib.md5(jd_text.encode()).hexdigest())
+            log_param("resume_length", len(resume_text.split()))
+            log_param("jd_length", len(jd_text.split()))
+            log_param("num_matched_keywords", len(matched_keywords))
+
+            # Metrics (for analysis)
+            log_metric("final_score", final_score)
+            log_metric("semantic_score", semantic_score)
+            log_metric("keyword_score", keyword_score)
+
+            # Artifacts (save full report)
+            log_artifact(new_path)
+
+            # Tags (extra info for filtering later)
+            mlflow.set_tag("matched_keywords", matched_keywords_text)
+            mlflow.set_tag("timestamp", timestamp)
 
         # generate visual bars for semantic similarity, keyword match, and overall score
         visual_bars = (
